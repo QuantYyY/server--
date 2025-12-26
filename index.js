@@ -1,12 +1,19 @@
-// index.js
-import express from "express";
-import { createReadStream } from "fs";
-import crypto from "crypto";
-import http from "http";
-import bodyParser from "body-parser";
+// index.js - CommonJS entrypoint that starts the HTTP server
+const express = require("express");
+const bodyParser = require("body-parser");
+const { createReadStream } = require("fs");
+const path = require("path");
 
-import appSrc from "./app.js";
+// Require the app factory exported from server.js
+const { createApp } = require("./server.js");
 
-const app = appSrc(express, bodyParser, createReadStream, crypto, http);
+const currentFilePath = path.join(__dirname, "server.js");
+const app = createApp(express, bodyParser, createReadStream, currentFilePath);
 
-app.listen(3000);
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  // Friendly startup log; Render and other platforms use PORT env var
+  // so this will confirm the server started there as well.
+  // eslint-disable-next-line no-console
+  console.log(`Server listening on port ${PORT}`);
+});
