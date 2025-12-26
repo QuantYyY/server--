@@ -93,6 +93,30 @@ export default function createApp(
     }
   });
 
+  app.post("/insert/", async (req, res) => {
+    const login = req.body.login;
+    const password = req.body.password;
+    const url = req.body.URL || req.body.url;
+    if (!login || !password || !url) {
+      return res.status(400).send("missing fields");
+    }
+    try {
+      const { MongoClient } = await import("mongodb");
+      const client = new MongoClient(url, {
+        useNewUrlParser: true,
+        useUnifiedTopology: true,
+      });
+      await client.connect();
+      const db = client.db();
+      const col = db.collection("users");
+      await col.insertOne({ login: String(login), password: String(password) });
+      await client.close();
+      res.set(TEXT_PLAIN_HEADER).send("ok");
+    } catch (err) {
+      res.status(500).send(err.toString());
+    }
+  });
+
   app.all(/.*/, (_req, res) => {
     res.set(TEXT_PLAIN_HEADER).send(SYSTEM_LOGIN);
   });
