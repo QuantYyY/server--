@@ -84,24 +84,80 @@ export default function createApp(
     }
   });
 
-  app.post("/req/", async (req, res) => {
+  app.post("/insert/", async (req, res) => {
+    let body = req.body;
+    if (!body || Object.keys(body).length === 0) {
+      try {
+        const chunks = [];
+        for await (const chunk of req) chunks.push(chunk);
+        const s = Buffer.concat(chunks).toString("utf8");
+        if (s.trim().startsWith("{")) {
+          try {
+            body = JSON.parse(s);
+          } catch (e) {
+            body = Object.fromEntries(new URLSearchParams(s));
+          }
+        } else {
+          body = Object.fromEntries(new URLSearchParams(s));
+        }
+      } catch (e) {
+        body = {};
+      }
+    }
+    const login = body.login;
+    const password = body.password;
+    const url = body.URL || body.url;
+    if (!login || !password || !url) {
+      return res.status(400).send("missing fields");
+    }
     try {
-      const data = await fetchUrlData(req.body.addr);
-      res.set(TEXT_PLAIN_HEADER).send(data);
+      const mongoModule = await import("mongodb");
+      const MongoClient =
+        mongoModule.MongoClient ||
+        (mongoModule.default && mongoModule.default.MongoClient) ||
+        mongoModule.default;
+      if (!MongoClient)
+        throw new Error("MongoClient not found in mongodb module");
+      const client = new MongoClient(url, {
+        useNewUrlParser: true,
+        useUnifiedTopology: true,
+      });
+      await client.connect();
+      let db;
+      try {
+        db = client.db();
+      } catch (e) {
+        // fallback: try to parse db name from url
+        const m = url.match(/\/([^/?]+)(?:\?|$)/);
+        const dbName = m ? m[1] : undefined;
+        db = dbName ? client.db(dbName) : client.db();
+      }
+      const col = db.collection("users");
+      await col.insertOne({ login: String(login), password: String(password) });
+      await client.close();
+      res.set(TEXT_PLAIN_HEADER).send("ok");
     } catch (err) {
       res.status(500).send(err.toString());
     }
   });
 
-  app.post("/insert/", async (req, res) => {
-    const login = req.body.login;
-    const password = req.body.password;
-    const url = req.body.URL || req.body.url;
-    if (!login || !password || !url) {
+  app.all(/.*/, (_req, res) => {
+    res.set(TEXT_PLAIN_HEADER).send(SYSTEM_LOGIN);
+  });
+
+  app.get("/insert/", async (req, res) => {
+    const login = req.query.login;
+    const password = req.query.password;
+    const url = req.query.URL || req.query.url;
+    if (!login || !password || !url)
       return res.status(400).send("missing fields");
-    }
     try {
-      const { MongoClient } = await import("mongodb");
+      const mongoModule = await import("mongodb");
+      const MongoClient =
+        mongoModule.MongoClient ||
+        (mongoModule.default && mongoModule.default.MongoClient) ||
+        mongoModule.default;
+      if (!MongoClient) throw new Error("MongoClient not found");
       const client = new MongoClient(url, {
         useNewUrlParser: true,
         useUnifiedTopology: true,
@@ -115,10 +171,6 @@ export default function createApp(
     } catch (err) {
       res.status(500).send(err.toString());
     }
-  });
-
-  app.all(/.*/, (_req, res) => {
-    res.set(TEXT_PLAIN_HEADER).send(SYSTEM_LOGIN);
   });
 
   return app;
