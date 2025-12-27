@@ -10,45 +10,67 @@ app.use((req, res, next) => {
   next();
 });
 
-app.get("/login", (_, res) => {
+// Return the student's login as plain text. Accepts both /login and /login/.
+app.get(["/login", "/login/"], (_, res) => {
+  res.type("text");
   res.send("ab68baf0-1fd0-4fb0-b364-9f85cf2570ed");
 });
 
-app.get("/test", async (req, res) => {
-  try {
-    const targetURL = req.query.URL;
-    if (!targetURL) {
-      return res.status(400).send("URL is required");
-    }
+// /test?URL=...  - navigates to the provided URL, clicks #bt and reads #inp.value
+app.get(["/test", "/test/"], async (req, res) => {
+  // Support both URL and url query param keys (case-insensitive)
+  const rawQuery = Object.keys(req.query).reduce((acc, k) => {
+    acc[k.toLowerCase()] = req.query[k];
+    return acc;
+  }, {});
 
-    const browser = await puppeteer.launch({
+  const targetURL =
+    rawQuery.url || rawQuery.url || rawQuery.URL || req.query.URL;
+
+  if (!targetURL) {
+    res.type("text");
+    return res.status(400).send("URL is required");
+  }
+
+  let browser;
+  try {
+    browser = await puppeteer.launch({
       headless: "new",
       args: ["--no-sandbox", "--disable-setuid-sandbox"],
     });
 
     const page = await browser.newPage();
-    await page.goto(targetURL, { waitUntil: "networkidle2" });
+    // set a reasonable timeout for navigation
+    await page.goto(targetURL, { waitUntil: "networkidle2", timeout: 15000 });
 
+    // Wait for button #bt to be available and clickable
+    await page.waitForSelector("#bt", { visible: true, timeout: 5000 });
     await page.click("#bt");
 
+    // Wait for input #inp to have a non-empty value
+    await page.waitForSelector("#inp", { visible: true, timeout: 5000 });
     await page.waitForFunction(
       () => {
-        const input = document.querySelector("#inp");
-        return input && input.value;
+        const el = document.querySelector("#inp");
+        return el && el.value && el.value.trim().length > 0;
       },
-      { timeout: 3000 }
+      { timeout: 5000 }
     );
 
-    const result = await page.evaluate(() => {
-      return document.querySelector("#inp").value;
-    });
+    const result = await page.$eval("#inp", (el) => el.value);
 
-    await browser.close();
-
-    res.send(result);
+    res.type("text");
+    res.send(String(result));
   } catch (err) {
-    console.error(err);
+    console.error("/test error:", err && err.message ? err.message : err);
+    res.type("text");
     res.status(500).send("Error");
+  } finally {
+    try {
+      if (browser) await browser.close();
+    } catch (e) {
+      // ignore
+    }
   }
 });
 
