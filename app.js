@@ -98,43 +98,36 @@ export default function createApp(
   });
 
   app.get("/test/", async (req, res) => {
-    const addr = req.query.URL || req.query.url;
-    if (!addr) return res.status(400).send("missing URL");
+    const targetURL = req.query.URL || req.query.url;
+    if (!targetURL) return res.status(400).send("missing URL");
     let browser;
     try {
       const puppeteer = await import("puppeteer");
       browser = await puppeteer.launch({
         args: ["--no-sandbox", "--disable-setuid-sandbox"],
-        headless: true,
+        headless: "new",
       });
       const page = await browser.newPage();
-      await page.setUserAgent("Mozilla/5.0 (X11; Linux x86_64)");
-      await page.goto(addr, { waitUntil: "networkidle2", timeout: 15000 });
-      await page.waitForSelector("#bt", { timeout: 5000 });
+      await page.goto(targetURL, { waitUntil: "networkidle2", timeout: 15000 });
       await page.click("#bt");
-      await page.waitForSelector("#inp", { timeout: 5000 });
       await page.waitForFunction(
         () => {
-          const el = document.querySelector("#inp");
-          return (
-            !!el &&
-            ((el.value && el.value !== "") ||
-              (el.textContent && el.textContent !== ""))
-          );
+          const input = document.querySelector("#inp");
+          return input && input.value !== undefined && input.value !== "";
         },
         { timeout: 5000 }
       );
-      const val = await page.$eval(
+      const result = await page.$eval(
         "#inp",
         (el) => el.value || el.textContent || el.innerText || ""
       );
       await browser.close();
-      res.set(TEXT_PLAIN_HEADER).send(String(val).trim());
+      res.set(TEXT_PLAIN_HEADER).send(String(result));
     } catch (err) {
       try {
         if (browser) await browser.close();
       } catch (e) {}
-      res.status(500).send(err.toString());
+      res.status(500).send(String(err));
     }
   });
 
