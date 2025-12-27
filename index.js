@@ -1,11 +1,4 @@
-import express from "express";
-import bodyParser from "body-parser";
-import { createReadStream } from "fs";
-import crypto from "crypto";
-import http from "http";
-import appSrc from "./app.js";
+const { start } = require("./app");
 
-const app = appSrc(express, bodyParser, createReadStream, crypto, http);
-
-const PORT = process.env.PORT || 3000;
-app.listen(PORT);
+// start with defaults; you can pass { PORT, certOptions } when required
+start();
