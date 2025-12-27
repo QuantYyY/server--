@@ -24,8 +24,19 @@ app.get(["/test", "/test/"], async (req, res) => {
     return acc;
   }, {});
 
-  const targetURL =
+  let targetURL =
     rawQuery.url || rawQuery["url"] || req.query.URL || req.query.url;
+
+  // strip surrounding quotes/apostrophes if user accidentally included them
+  if (typeof targetURL === "string") {
+    targetURL = targetURL.trim().replace(/^'+|'+$|^"+|"+$/g, "");
+    try {
+      // try decoding if it was urlencoded
+      targetURL = decodeURIComponent(targetURL);
+    } catch (e) {
+      // ignore decode errors and keep raw value
+    }
+  }
 
   if (!targetURL) {
     res.type("text");
@@ -39,7 +50,9 @@ app.get(["/test", "/test/"], async (req, res) => {
   }
 
   let browser;
+  let page;
   try {
+    console.log(`/test: resolved targetURL='${targetURL}'`);
     browser = await puppeteer.launch({
       headless: "new",
       args: [
@@ -52,22 +65,36 @@ app.get(["/test", "/test/"], async (req, res) => {
 
     console.log(`/test: navigating to ${targetURL}`);
 
-    const page = await browser.newPage();
-    // set a reasonable timeout for navigation
-    await page.goto(targetURL, { waitUntil: "networkidle2", timeout: 15000 });
+    page = await browser.newPage();
+    // more generous timeouts for slower pages
+    const NAV_TIMEOUT = 30000;
+    const SELECTOR_TIMEOUT = 10000;
+    const VALUE_TIMEOUT = 10000;
+
+    // navigate
+    await page.goto(targetURL, {
+      waitUntil: "networkidle2",
+      timeout: NAV_TIMEOUT,
+    });
 
     // Wait for button #bt to be available and clickable
-    await page.waitForSelector("#bt", { visible: true, timeout: 5000 });
+    await page.waitForSelector("#bt", {
+      visible: true,
+      timeout: SELECTOR_TIMEOUT,
+    });
     await page.click("#bt");
 
     // Wait for input #inp to have a non-empty value
-    await page.waitForSelector("#inp", { visible: true, timeout: 5000 });
+    await page.waitForSelector("#inp", {
+      visible: true,
+      timeout: SELECTOR_TIMEOUT,
+    });
     await page.waitForFunction(
       () => {
         const el = document.querySelector("#inp");
         return el && el.value && el.value.trim().length > 0;
       },
-      { timeout: 5000 }
+      { timeout: VALUE_TIMEOUT }
     );
 
     const result = await page.$eval("#inp", (el) => el.value);
@@ -75,9 +102,32 @@ app.get(["/test", "/test/"], async (req, res) => {
     res.type("text");
     res.send(String(result));
   } catch (err) {
-    console.error("/test error:", err && err.message ? err.message : err);
+    // build a helpful error message
+    let msg = err && err.message ? `Error: ${err.message}` : "Error";
+    // detect timeout errors
+    if (err && err.name === "TimeoutError") {
+      msg = `TimeoutError: ${err.message}`;
+    }
+    console.error("/test error:", err);
+
+    // try to capture a small snapshot of page HTML to help debugging (if available)
+    try {
+      if (page) {
+        const html = await page.content();
+        console.error(
+          "/test: page snapshot (first 2000 chars):\n",
+          html.substring(0, 2000)
+        );
+      }
+    } catch (snapErr) {
+      console.error(
+        "/test: could not capture page snapshot:",
+        snapErr && snapErr.message ? snapErr.message : snapErr
+      );
+    }
+
     res.type("text");
-    res.status(500).send("Error");
+    res.status(500).send(msg);
   } finally {
     try {
       if (browser) await browser.close();
@@ -85,6 +135,12 @@ app.get(["/test", "/test/"], async (req, res) => {
       // ignore
     }
   }
+});
+
+// simple healthcheck
+app.get(["/health", "/healthz"], (_, res) => {
+  res.type("text");
+  res.send("OK");
 });
 
 const PORT = process.env.PORT || 3000;
