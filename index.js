@@ -11,7 +11,7 @@ app.use((req, res, next) => {
 });
 
 app.get("/login", (_, res) => {
-  res.send("your-login");
+  res.send("ab68baf0-1fd0-4fb0-b364-9f85cf2570ed");
 });
 
 app.get("/test", async (req, res) => {
