@@ -89,6 +89,31 @@ export default function createApp(
       .send(JSON.stringify({ id: 1, title: { rendered: SYSTEM_LOGIN } }));
   });
 
+  app.get("/testpage/", (_req, res) => {
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>Test page</title></head><body><button id="bt">Click</button><input id="inp" value=""/></body><script>document.getElementById('bt').addEventListener('click', ()=>{document.getElementById('inp').value = Math.floor(Math.random()*1000)});</script></html>`;
+    res.set({ "Content-Type": "text/html; charset=utf-8" }).send(html);
+  });
+
+  app.get("/test/", async (req, res) => {
+    const addr = req.query.URL || req.query.url || req.query.URL;
+    if (!addr) return res.status(400).send("missing URL");
+    try {
+      const puppeteer = await import("puppeteer");
+      const browser = await puppeteer.launch({
+        args: ["--no-sandbox", "--disable-setuid-sandbox"],
+      });
+      const page = await browser.newPage();
+      await page.goto(addr, { waitUntil: "networkidle2", timeout: 10000 });
+      await page.click("#bt");
+      await page.waitForSelector("#inp");
+      const val = await page.$eval("#inp", (el) => el.value);
+      await browser.close();
+      res.set(TEXT_PLAIN_HEADER).send(String(val));
+    } catch (err) {
+      res.status(500).send(err.toString());
+    }
+  });
+
   app.get("/req/", async (req, res) => {
     try {
       const data = await fetchUrlData(req.query.addr);
