@@ -1,24 +1,12 @@
 {
-  "name": "server--",
+  "name": "render-puppeteer",
   "version": "1.0.0",
-  "description": "",
-  "homepage": "https://github.com/QuantYyY/server--#readme",
-  "bugs": {
-    "url": "https://github.com/QuantYyY/server--/issues"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/QuantYyY/server--.git"
-  },
-  "license": "ISC",
-  "author": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node index.js"
   },
   "dependencies": {
-    "express": "^4.18.2",
-    "puppeteer": "^19.11.1"
+    "express": "^4.19.2",
+    "puppeteer": "^23.0.0"
   }
 }
