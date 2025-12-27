@@ -2,6 +2,7 @@ const express = require("express");
 const puppeteer = require("puppeteer");
 
 const https = require("https");
+const http = require("http");
 const fs = require("fs");
 
 function start(options = {}) {
@@ -54,15 +55,48 @@ function start(options = {}) {
     res.send(result);
   });
 
-  const PORT = options.PORT || 443;
+  const PORT = process.env.PORT || options.PORT || 10000;
 
-  // TODO: Добавьте пути к вашим сертификатам
-  const certOptions = options.certOptions || {
-    key: fs.readFileSync("/your-key-path/privkey.pem"),
-    cert: fs.readFileSync("/your-cert-path/fullchain.pem"),
-  };
+  // Puppeteer executable path override (optional)
+  const puppeteerExec = process.env.CHROMIUM_PATH || options.executablePath;
 
-  const server = https.createServer(certOptions, app);
+  // create a launcher function that uses the resolved executable path
+  function launchPuppeteer(launchOpts = {}) {
+    const base = Object.assign(
+      { headless: "new", args: ["--no-sandbox", "--disable-setuid-sandbox"] },
+      launchOpts
+    );
+    if (puppeteerExec) base.executablePath = puppeteerExec;
+    return puppeteer.launch(base);
+  }
+
+  // attach launch helper to app locals so handlers can use it
+  app.locals.launchPuppeteer = launchPuppeteer;
+
+  // SSL certs: prefer explicit options.certOptions, then env paths; if missing, fall back to HTTP
+  let server;
+  if (
+    options.certOptions &&
+    options.certOptions.key &&
+    options.certOptions.cert
+  ) {
+    server = https.createServer(options.certOptions, app);
+  } else if (process.env.SSL_KEY_PATH && process.env.SSL_CERT_PATH) {
+    const keyPath = process.env.SSL_KEY_PATH;
+    const certPath = process.env.SSL_CERT_PATH;
+    if (fs.existsSync(keyPath) && fs.existsSync(certPath)) {
+      const certOptions = {
+        key: fs.readFileSync(keyPath),
+        cert: fs.readFileSync(certPath),
+      };
+      server = https.createServer(certOptions, app);
+    }
+  }
+
+  if (!server) {
+    // fallback to plain HTTP
+    server = http.createServer(app);
+  }
 
   server.listen(PORT);
 
