@@ -2,6 +2,9 @@ const express = require("express");
 const puppeteer = require("puppeteer");
 
 const app = express();
+const { exec } = require("child_process");
+const util = require("util");
+const execAsync = util.promisify(exec);
 
 app.use((req, res, next) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -53,15 +56,74 @@ app.get(["/test", "/test/"], async (req, res) => {
   let page;
   try {
     console.log(`/test: resolved targetURL='${targetURL}'`);
-    browser = await puppeteer.launch({
-      headless: "new",
-      args: [
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        // avoid /dev/shm issues on some containers
-        "--disable-dev-shm-usage",
-      ],
-    });
+
+    async function tryLaunchBrowser() {
+      return puppeteer.launch({
+        headless: "new",
+        args: [
+          "--no-sandbox",
+          "--disable-setuid-sandbox",
+          // avoid /dev/shm issues on some containers
+          "--disable-dev-shm-usage",
+        ],
+      });
+    }
+
+    async function ensureChromeInstalled() {
+      const cachePath =
+        process.env.PUPPETEER_CACHE_PATH || "/opt/render/.cache/puppeteer";
+      console.log(
+        `/test: attempting to install Chrome into cache ${cachePath}`
+      );
+      const cmd = `mkdir -p \"${cachePath}\" && chmod -R 777 \"${cachePath}\" && npx puppeteer@23 browsers install chrome`;
+      try {
+        const env = Object.assign({}, process.env, {
+          PUPPETEER_CACHE_PATH: cachePath,
+        });
+        const { stdout, stderr } = await execAsync(cmd, {
+          env,
+          maxBuffer: 1024 * 1024 * 10,
+        });
+        console.log("/test: chrome install stdout:", stdout.substring(0, 1000));
+        if (stderr)
+          console.error(
+            "/test: chrome install stderr:",
+            stderr.substring(0, 1000)
+          );
+      } catch (e) {
+        console.error("/test: chrome install failed:", e);
+        throw e;
+      }
+    }
+
+    try {
+      browser = await tryLaunchBrowser();
+    } catch (launchErr) {
+      console.error(
+        "/test: initial puppeteer.launch error:",
+        launchErr && launchErr.message ? launchErr.message : launchErr
+      );
+      const msg =
+        launchErr && launchErr.message ? String(launchErr.message) : "";
+      if (
+        msg.includes("Could not find Chrome") ||
+        msg.includes("Failed to launch the browser")
+      ) {
+        // try to install chrome at runtime and retry once
+        try {
+          await ensureChromeInstalled();
+          browser = await tryLaunchBrowser();
+        } catch (retryErr) {
+          console.error(
+            "/test: failed to install or launch chrome on retry:",
+            retryErr
+          );
+          throw retryErr;
+        }
+      } else {
+        throw launchErr;
+      }
+    }
 
     console.log(`/test: navigating to ${targetURL}`);
 

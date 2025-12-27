@@ -2,9 +2,13 @@
   "name": "render-puppeteer",
   "version": "1.0.0",
   "main": "index.js",
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "start": "node index.js",
-    "postinstall": "npx puppeteer@23 browsers install chrome"
+    "postinstall": "npx puppeteer@23 browsers install chrome",
+    "install-chrome": "mkdir -p \"${PUPPETEER_CACHE_PATH:-/opt/render/.cache/puppeteer}\" && chmod -R 777 \"${PUPPETEER_CACHE_PATH:-/opt/render/.cache/puppeteer}\" && PUPPETEER_CACHE_PATH=\"${PUPPETEER_CACHE_PATH:-/opt/render/.cache/puppeteer}\" npx puppeteer@23 browsers install chrome"
   },
   "dependencies": {
     "express": "^4.19.2",
