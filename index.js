@@ -25,19 +25,32 @@ app.get(["/test", "/test/"], async (req, res) => {
   }, {});
 
   const targetURL =
-    rawQuery.url || rawQuery.url || rawQuery.URL || req.query.URL;
+    rawQuery.url || rawQuery["url"] || req.query.URL || req.query.url;
 
   if (!targetURL) {
     res.type("text");
     return res.status(400).send("URL is required");
   }
 
+  // basic validation: must be http or https
+  if (!/^https?:\/\//i.test(targetURL)) {
+    res.type("text");
+    return res.status(400).send("URL must start with http:// or https://");
+  }
+
   let browser;
   try {
     browser = await puppeteer.launch({
       headless: "new",
-      args: ["--no-sandbox", "--disable-setuid-sandbox"],
+      args: [
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        // avoid /dev/shm issues on some containers
+        "--disable-dev-shm-usage",
+      ],
     });
+
+    console.log(`/test: navigating to ${targetURL}`);
 
     const page = await browser.newPage();
     // set a reasonable timeout for navigation
