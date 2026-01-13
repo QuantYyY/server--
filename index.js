@@ -3,6 +3,7 @@ import bodyParser from "body-parser";
 import cors from "cors";
 import pug from "pug";
 import puppeteer from "puppeteer";
+import fs from "fs";
 const app = express();
 app.use(bodyParser.json());
 app.use(cors());
@@ -37,10 +38,42 @@ app.get("/test/", async (req, res) => {
   if (!url) return res.status(400).send("URL query parameter required");
 
   try {
-    const browser = await puppeteer.launch({
+    // diagnostic: log Puppeteer cache path and check for system chromium
+    console.log(
+      "PUPPETEER_CACHE_PATH=",
+      process.env.PUPPETEER_CACHE_PATH || "(not set)"
+    );
+    const chromiumCandidates = [
+      "/usr/bin/chromium-browser",
+      "/usr/bin/chromium",
+      "/usr/bin/google-chrome-stable",
+    ];
+    let execPath = null;
+    for (const p of chromiumCandidates) {
+      try {
+        if (fs.existsSync(p)) {
+          execPath = p;
+          break;
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+    console.log("Chromium execPath detected=", execPath || "(none)");
+
+    const launchOpts = {
       headless: "new",
       args: ["--no-sandbox", "--disable-setuid-sandbox"],
+    };
+    if (execPath) launchOpts.executablePath = execPath;
+
+    console.log("Launching puppeteer with options", {
+      executablePath: launchOpts.executablePath
+        ? launchOpts.executablePath
+        : "(default)",
+      args: launchOpts.args,
     });
+    const browser = await puppeteer.launch(launchOpts);
 
     const page = await browser.newPage();
     await page.goto(url, { waitUntil: "networkidle2" });
