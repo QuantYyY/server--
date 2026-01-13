@@ -1,5 +1,12 @@
 {
   "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node index.js",
+    "install-chrome": "npx puppeteer@24 browsers install chrome"
+  },
   "dependencies": {
     "cors": "^2.8.5",
     "express": "^5.1.0",
